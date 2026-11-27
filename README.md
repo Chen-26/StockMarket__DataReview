@@ -1,24 +1,34 @@
-# StockMarket Data Review
+# �г����̿���
 
-A compact A-share and US-market review page with daily notes saved in the browser.
+��ɫ��Ӧʽ A �� / ���ɸ�����ҳ����ֱ�Ӵ� `index.html` ���鲼�ֺͽ����������ļ�ģʽ��ʾ����Ԥ�����ݡ����� Cloudflare Pages ��ҳ���ͨ��ͬ�� Pages Function ��ȡ���顣
 
-## Features
+## ҳ������
 
-- A-share and US market index cards, watchlist table, daily market/decision/trade notes.
-- GitHub Actions fetches a market snapshot every five minutes on weekdays and deploys the page to GitHub Pages.
-- The page checks for a newer snapshot once per minute. Notes stay in the current browser's local storage and are not committed to the repository.
+- A �ɡ����ɷ���չʾ��Ҫָ���ʹ�����ġ�
+- ����/����������ÿ������ɸѡȫ����ָ������ɡ�
+- ÿ���г��жϡ����׸��̺���һ���ƻ��Զ������ڵ�ǰ�������
+- ��ҳÿ���Ӽ�����飻Function ʹ�ñ�Ե���棬�����ظ�����
 
-## Publish
+## Cloudflare Pages ��Ѳ���
 
-The workflow is in `.github/workflows/pages.yml`. After pushing this repository to the `main` branch, check **Actions** for the `Publish market review` run. In **Settings �� Pages**, choose **GitHub Actions** as the build and deployment source if it is not configured automatically. GitHub Pages for a private repository requires an eligible GitHub plan. Once the first deployment succeeds, the run summary/environment contains the site URL.
+1. �� Cloudflare ����̨���� **Workers & Pages �� Create application �� Pages �� Connect to Git**��
+2. ��Ȩ GitHub��ѡ��˽�вֿ� `Chen-26/StockMarket__DataReview` ��������֧ `main`��
+3. Framework preset ѡ **None**��Build command �� `mkdir -p public && cp index.html public/index.html`��Build output directory �� `public`��
+4. ���沢�����Ժ� push �� `main` ���Զ�������
 
-The first deployment is triggered by the initial push. The scheduled refresh is set to every five minutes on weekdays (UTC); GitHub may delay scheduled runs during high load. GitHub Actions schedules have a five-minute minimum interval.
+`functions/api/quotes.js` �� Pages Function������ API key ������ʱ����������Cloudflare Pages Functions �����ռ�� Workers Free ���������ȣ���̬��Դ������ѡ�Git ������ѷ���ÿ����� 500 �ι������������� Cloudflare ��ǰ�ײ�˵��Ϊ׼��
 
-## Watchlist
+> ע�⣺Cloudflare Pages ��ַĬ�Ͽɹ������ʣ�˽�� GitHub �ֿⲻ���Զ�����ҳҲ���˽�С����̱ʼ�ֻ�浱ǰ������������ϴ�������Ҫ��ҳ���ʿ��ƣ�����Ϊվ������ Cloudflare Access��
 
-Edit `WATCHLIST` in `scripts/fetch_quotes.py` to change the default markets and symbols. Yahoo Finance symbols commonly use `.SS` for Shanghai listings and `.SZ` for Shenzhen listings. Push the change to redeploy.
+## ������ע�б�
 
-## Data notes
+�� `functions/api/quotes.js` �� `WATCHLIST` �޸Ĵ��룻��������ģ����� `index.html` ����չʾ���ƺͷ��ࡣ
 
-The page uses Yahoo Finance's chart endpoint, which is an undocumented interface rather than a supported public market-data API. Quotes can be delayed, rate-limited, incomplete, or unavailable. The page is for review and reference, not trading or investment advice. For guaranteed real-time data, connect a licensed provider and configure its credentials as GitHub Actions secrets.
+## ���Ľ���ð�̲���
+
+��Ҫ Node.js 20 ����°汾������ĿĿ¼ִ�� `node tests/smoke.cjs`����֤ҳ��ű���A ��/����������Ⱦ�����ɸѡ���������ʼ��Զ�����/��ա��ֶ�ˢ�¡�����Ԥ�����˺����� Function ��Ӧ��
+
+## ����˵��
+
+�������� Yahoo Finance ͼ���ӿڡ��ýӿڲ�����ʵʱ SLA �Ĺ������� API�������ӳ١���������ʱ�����ã�ҳ��������̲ο���������Ͷ�ʽ��顣
 
