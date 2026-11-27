@@ -13,7 +13,7 @@ function element(id, dataset = {}) {
   if (elements.has(id)) return elements.get(id);
   const classes = new Set();
   const value = {
-    id, dataset, value: "", textContent: "", innerHTML: "", style: {}, disabled: false,
+    id, dataset, value: "", textContent: "", innerHTML: "", style: {}, disabled: false, hidden: false, attributes: {},
     classList: {
       add(name) { classes.add(name); },
       remove(name) { classes.delete(name); },
@@ -25,6 +25,7 @@ function element(id, dataset = {}) {
         return add;
       },
     },
+    setAttribute(name, item) { this.attributes[name] = item; },
     addEventListener(type, callback) { handlers.set(id + ":" + type, callback); },
   };
   elements.set(id, value);
@@ -35,6 +36,18 @@ const filters = [
   ["cn", "all"], ["cn", "index"], ["cn", "stock"],
   ["us", "all"], ["us", "index"], ["us", "stock"],
 ].map(([market, filter], i) => element("filter-" + i, { market, filter }));
+const marketTabs = [
+  element("tab-cn", { marketTab: "cn" }),
+  element("tab-us", { marketTab: "us" }),
+];
+const marketPanels = [
+  element("cnPanel", { marketView: "cn" }),
+  element("usPanel", { marketView: "us" }),
+];
+marketTabs[0].classList.add("active");
+marketTabs[0].setAttribute("aria-selected", "true");
+marketTabs[1].setAttribute("aria-selected", "false");
+marketPanels[1].hidden = true;
 const data = {
   updatedAt: "2026-11-27T14:00:00Z",
   provider: "smoke fixture",
@@ -50,6 +63,8 @@ const context = {
   document: {
     getElementById: element,
     querySelectorAll(selector) {
+      if (selector === ".market-tab") return marketTabs;
+      if (selector === ".market-view") return marketPanels;
       if (selector === ".filter") return filters;
       const match = selector.match(/\.filter\[data-market="(cn|us)"\]/);
       return match ? filters.filter((item) => item.dataset.market === match[1]) : [];
@@ -79,6 +94,14 @@ async function main() {
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(element("cnRows").innerHTML, /600519\.SS/, "A-share table renders");
   assert.match(element("usRows").innerHTML, /NVDA/, "US table renders");
+
+  fire("tab-us", "click");
+  assert.equal(element("cnPanel").hidden, true, "US tab hides A-share panel");
+  assert.equal(element("usPanel").hidden, false, "US tab shows US panel");
+  assert.equal(element("tab-us").attributes["aria-selected"], "true", "US tab exposes selected state");
+  fire("tab-cn", "click");
+  assert.equal(element("cnPanel").hidden, false, "A-share tab shows A-share panel");
+  assert.equal(element("usPanel").hidden, true, "A-share tab hides US panel");
 
   fire("filter-1", "click");
   assert.match(element("cnRows").innerHTML, /000001\.SS/, "index filter keeps A-share index");
