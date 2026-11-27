@@ -3,12 +3,14 @@ name: Publish market review
 on:
   push:
     branches: [main]
+    paths-ignore:
+      - "data/history/**"
   schedule:
     - cron: "*/5 * * * 1-5"
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write
   pages: write
   id-token: write
 
@@ -31,8 +33,25 @@ jobs:
           python-version: "3.12"
       - name: Fetch market snapshot
         run: python scripts/fetch_quotes.py --output public/data/quotes.json
+      - name: Archive end-of-day session
+        run: python scripts/archive_snapshot.py --snapshot public/data/quotes.json --history-dir data/history
+      - name: Persist daily snapshot
+        run: |
+          if [ -d data/history ]; then
+            git add data/history
+            if ! git diff --cached --quiet; then
+              git config user.name "github-actions[bot]"
+              git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+              git commit -m "Archive end-of-day market snapshot [skip ci]"
+              git push
+            fi
+          fi
       - name: Prepare website
-        run: cp index.html public/index.html
+        run: |
+          cp index.html public/index.html
+          mkdir -p public/data/history
+          if [ -d data/history ]; then cp -R data/history/. public/data/history/; fi
+          if [ ! -f public/data/history/index.json ]; then echo '{"dates":[]}' > public/data/history/index.json; fi
       - name: Configure GitHub Pages
         uses: actions/configure-pages@v5
       - name: Upload website artifact
