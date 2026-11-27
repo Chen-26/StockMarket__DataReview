@@ -100,7 +100,7 @@ def _fetch_pool(route, day):
     query = urllib.parse.urlencode(
         {
             "page": 1,
-            "limit": 1600,
+            "limit": 200,
             "field": "199112,10,9001,330323,330324,330325,9002,330329,133971,133970,1968584,3475914,9003,9004",
             "filter": "HS,GEM2STAR",
             "date": day,
@@ -119,9 +119,9 @@ def _fetch_pool(route, day):
     meta = data.get("page") or {}
     total = meta.get("total")
     trade_date = data.get("date") or day
-    if total is not None and int(total) != len(info):
-        raise ValueError("Tonghuashun pool pagination is incomplete")
-    return info, str(trade_date)
+    if total is None:
+        raise ValueError("Tonghuashun pool total is missing")
+    return info, str(trade_date), int(total)
 
 
 def fetch_emotion_pools(day):
@@ -133,10 +133,12 @@ def fetch_emotion_pools(day):
     }
     result = {}
     dates = set()
+    counts = {}
     for key, route in routes.items():
-        rows, trade_date = _fetch_pool(route, day)
+        rows, trade_date, total = _fetch_pool(route, day)
         dates.add(trade_date)
         result[key] = rows
+        counts[key] = total
     if len(dates) != 1:
         raise ValueError("Tonghuashun pool dates do not match")
-    return {"tradeDate": dates.pop(), "pools": result, "provider": "Tonghuashun"}
+    return {"tradeDate": dates.pop(), "pools": result, "counts": counts, "provider": "Tonghuashun"}
