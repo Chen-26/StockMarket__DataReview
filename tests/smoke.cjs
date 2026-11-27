@@ -78,6 +78,8 @@ const data = {
     { symbol: "NVDA", name: "NVIDIA", market: "美股", category: "美股个股", price: 140, changePercent: 1.2, sparkline: [138, 140] },
   ],
 };
+const historicalData = { ...data, updatedAt: "2026-11-26T14:00:00Z", emotion: { ...data.emotion, tradeDate: "2026-11-26" } };
+const requestedUrls = [];
 const storage = new Map();
 const context = {
   document: {
@@ -98,7 +100,13 @@ const context = {
     setItem(key, value) { storage.set(key, value); },
     removeItem(key) { storage.delete(key); },
   },
-  fetch: async () => ({ ok: true, json: async () => data }),
+  fetch: async (url) => {
+    requestedUrls.push(url);
+    if (url.includes("data/history/index.json")) return { ok: true, json: async () => ({ dates: ["2026-11-26"] }) };
+    if (url.includes("data/history/2026-11-26.json")) return { ok: true, json: async () => historicalData };
+    if (url.includes("data/history/")) return { ok: false, json: async () => ({}) };
+    return { ok: true, json: async () => data };
+  },
   setInterval() { return 1; },
   setTimeout(callback) { callback(); return 1; },
   clearTimeout() {},
@@ -121,6 +129,18 @@ async function main() {
   assert.equal(element("limitUpCount").textContent, "60", "limit-up count renders from snapshot");
   assert.equal(element("brokenRate").textContent, "25.0%", "opened-limit rate renders from snapshot");
   assert.match(element("yesterdayRows").innerHTML, /600001/, "yesterday limit-up performance renders");
+  assert.equal(element("tradeDate").value, "2026-11-27", "date picker defaults to snapshot trading day");
+  element("tradeDate").value = "2026-11-26";
+  fire("tradeDate", "change");
+  await new Promise((resolve) => setImmediate(resolve));
+  assert.ok(requestedUrls.some((url) => url.includes("data/history/2026-11-26.json")), "selected trading date loads archived snapshot");
+  assert.equal(element("emotionDate").textContent, "2026-11-26", "historical snapshot renders its own date");
+  element("tradeDate").value = "2026-11-25";
+  fire("tradeDate", "change");
+  assert.equal(element("tradeDate").value, "2026-11-26", "unarchived dates are rejected");
+  element("tradeDate").value = "2026-11-27";
+  fire("tradeDate", "change");
+  await new Promise((resolve) => setImmediate(resolve));
   fire("cn-tab-emotion", "click");
   assert.equal(element("cn-market-view").hidden, true, "emotion tab hides market view");
   assert.equal(element("cn-emotion-view").hidden, false, "emotion tab shows emotion view");
@@ -154,7 +174,7 @@ async function main() {
 
   fire("refresh", "click");
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(element("status").innerHTML, /行情快照已连接/, "manual refresh loads quote snapshot");
+  assert.match(element("status").innerHTML, /\u6700\u65b0\u884c\u60c5\u5feb\u7167/, "manual refresh loads quote snapshot");
   element("search").value = "";
   fire("search", "input");
   context.fetch = async () => { throw new Error("local file has no snapshot file"); };
