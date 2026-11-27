@@ -3,6 +3,7 @@
 
 import argparse
 import datetime as dt
+from zoneinfo import ZoneInfo
 import json
 import os
 import time
@@ -87,6 +88,176 @@ def fetch_quote(symbol, market, category):
     return parse_quote_result(results[0], symbol, market, category)
 
 
+
+EASTMONEY_HEADERS = {
+    "Accept": "application/json, text/plain, */*",
+    "Referer": "https://quote.eastmoney.com/",
+    "User-Agent": "Mozilla/5.0 (compatible; StockMarketDataReview/1.0)",
+}
+
+
+def fetch_json(url):
+    request = urllib.request.Request(url, headers=EASTMONEY_HEADERS)
+    with urllib.request.urlopen(request, timeout=18) as response:
+        return json.loads(response.read().decode("utf-8"))
+
+
+def eastmoney_list(endpoint, params):
+    url = "https://push2ex.eastmoney.com/{}?{}".format(
+        endpoint, urllib.parse.urlencode(params)
+    )
+    payload = fetch_json(url)
+    data = payload.get("data") or {}
+    pool = data.get("pool") or data.get("diff") or []
+    if isinstance(pool, dict):
+        pool = list(pool.values())
+    return data, pool
+
+
+def parse_pool_stock(item):
+    """Normalize Eastmoney's current and yesterday limit-pool item."""
+    code = item.get("c") or item.get("code") or item.get("f12")
+    name = item.get("n") or item.get("name") or item.get("f14") or code
+    change = item.get("zdp")
+    if change is None:
+        change = item.get("f3")
+    if isinstance(change, str):
+        change = change.replace("%", "").strip()
+    try:
+        change = float(change) if change is not None else None
+    except (TypeError, ValueError):
+        change = None
+    return {
+        "symbol": str(code or ""),
+        "name": str(name or ""),
+        "changePercent": change,
+        "price": item.get("p") or item.get("f2"),
+        "limitUpDays": item.get("lbc"),
+    }
+
+
+def fetch_emotion(trade_date=None):
+    """Fetch A-share breadth and daily limit-pool data from Eastmoney."""
+    day = trade_date or dt.datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    display_day = "{}-{}-{}".format(day[:4], day[4:6], day[6:8])
+    current_changes = {}
+    result = {
+        "tradeDate": display_day,
+        "breadth": {"up": None, "down": None, "flat": None, "total": None},
+        "pools": {"limitUpCount": None, "limitDownCount": None, "brokenCount": None, "brokenRate": None},
+        "yesterdayLimitUp": [],
+        "yesterdayLimitDown": [],
+        "yesterdayPerformance": {},
+        "errors": [],
+    }
+    try:
+        query = urllib.parse.urlencode({
+            "pn": 1, "pz": 6000, "po": 1, "np": 1, "fltt": 2,
+            "invt": 2, "fid": "f3",
+            "fs": "m:0+t:6,m:0+t:80,m:1+t:2,m:1+t:23",
+            "fields": "f12,f14,f3",
+        })
+        payload = fetch_json("https://push2.eastmoney.com/api/qt/clist/get?{}".format(query))
+        data = payload.get("data") or {}
+        items = data.get("diff") or []
+        if isinstance(items, dict):
+            items = list(items.values())
+        changes = []
+        for item in items:
+            try:
+                value = float(item.get("f3"))
+            except (TypeError, ValueError):
+                continue
+            changes.append(value)
+            code = item.get("f12")
+            if code:
+                current_changes[str(code)] = value
+        result["breadth"] = {
+            "up": sum(1 for value in changes if value > 0),
+            "down": sum(1 for value in changes if value < 0),
+            "flat": sum(1 for value in changes if value == 0),
+            "total": data.get("total", len(changes)),
+        }
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        result["errors"].append({"source": "breadth", "error": str(exc)[:160]})
+
+    pools = [
+        ("limitUpCount", "getTopicZTPool"),
+        ("limitDownCount", "getTopicDTPool"),
+        ("brokenCount", "getTopicZBPool"),
+    ]
+    for key, endpoint in pools:
+        try:
+            data, pool = eastmoney_list(endpoint, {
+                "ut": "7eea3edcaed734bea9cbfc24409ed989",
+                "dpt": "wz.ztzt", "Pageindex": 0, "pagesize": 1000,
+                "sort": "fbt:asc", "date": day,
+            })
+            result["pools"][key] = data.get("tc", len(pool))
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            result["errors"].append({"source": key, "error": str(exc)[:160]})
+    limit_up = result["pools"]["limitUpCount"]
+    broken = result["pools"]["brokenCount"]
+    if limit_up is not None and broken is not None and int(limit_up) + int(broken):
+        result["pools"]["brokenRate"] = round(int(broken) / (int(limit_up) + int(broken)) * 100, 2)
+
+    yesterday_specs = [
+        ("yesterdayLimitUp", "getYesterdayZTPool", "up"),
+    ]
+    for key, endpoint, group in yesterday_specs:
+        try:
+            data, pool = eastmoney_list(endpoint, {
+                "ut": "7eea3edcaed734bea9cbfc24409ed989",
+                "dpt": "wz.ztzt", "Pageindex": 0, "pagesize": 1000,
+                "sort": "zdp:desc", "date": day,
+            })
+            stocks = [parse_pool_stock(item) for item in pool]
+            result[key] = stocks
+            valid = [item["changePercent"] for item in stocks if item["changePercent"] is not None]
+            result["yesterdayPerformance"][group] = {
+                "count": data.get("tc", len(stocks)),
+                "avgChangePercent": round(sum(valid) / len(valid), 2) if valid else None,
+                "positiveCount": sum(1 for value in valid if value > 0),
+                "negativeCount": sum(1 for value in valid if value < 0),
+            }
+        except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+            result["errors"].append({"source": key, "error": str(exc)[:160]})
+
+    # Yesterday's limit-down cohort has no dedicated Eastmoney performance pool.
+    # Find the most recent prior session, then apply today's all-stock quote changes.
+    try:
+        prior_pool = []
+        prior_date = None
+        for offset in range(1, 11):
+            candidate = (dt.datetime.strptime(day, "%Y%m%d") - dt.timedelta(days=offset)).strftime("%Y%m%d")
+            prior_data, prior_up_pool = eastmoney_list("getTopicZTPool", {
+                "ut": "7eea3edcaed734bea9cbfc24409ed989", "dpt": "wz.ztzt",
+                "Pageindex": 0, "pagesize": 1000, "sort": "fbt:asc", "date": candidate,
+            })
+            if int(prior_data.get("tc", len(prior_up_pool)) or 0) > 0:
+                prior_date = candidate
+                _, prior_pool = eastmoney_list("getTopicDTPool", {
+                    "ut": "7eea3edcaed734bea9cbfc24409ed989", "dpt": "wz.ztzt",
+                    "Pageindex": 0, "pagesize": 1000, "sort": "fbt:asc", "date": candidate,
+                })
+                break
+        stocks = [parse_pool_stock(item) for item in prior_pool]
+        for stock in stocks:
+            stock["changePercent"] = current_changes.get(stock["symbol"])
+        result["yesterdayLimitDown"] = stocks
+        valid = [stock["changePercent"] for stock in stocks if stock["changePercent"] is not None]
+        result["yesterdayPerformance"]["down"] = {
+            "count": len(stocks),
+            "avgChangePercent": round(sum(valid) / len(valid), 2) if valid else None,
+            "positiveCount": sum(1 for value in valid if value > 0),
+            "negativeCount": sum(1 for value in valid if value < 0),
+        }
+        if prior_date:
+            result["yesterdayDate"] = "{}-{}-{}".format(prior_date[:4], prior_date[4:6], prior_date[6:8])
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        result["errors"].append({"source": "yesterdayLimitDown", "error": str(exc)[:160]})
+    return result
+
 def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
     quotes, errors = [], []
     for symbol, market, category in watchlist:
@@ -96,11 +267,16 @@ def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
             errors.append({"symbol": symbol, "error": str(exc)[:180]})
         if pause:
             time.sleep(pause)
+    try:
+        emotion = fetch_emotion()
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        emotion = {"errors": [{"source": "emotion", "error": str(exc)[:160]}]}
     return {
         "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "provider": "Yahoo Finance chart · 1m",
+        "provider": "Yahoo Finance + Eastmoney public quote endpoints",
         "intervalMinutes": 5,
         "quotes": quotes,
+        "emotion": emotion,
         "errors": errors,
     }
 
