@@ -347,6 +347,21 @@ def main():
             len(snapshot["quotes"]), len(snapshot["errors"]), args.output
         )
     )
+    for item in snapshot["quotes"]:
+        if item.get("market") == "A股":
+            print("A-share quote: {} {} {} {}% ({})".format(
+                item.get("symbol"), item.get("price"), item.get("change"),
+                round(item["changePercent"], 2) if item.get("changePercent") is not None else "n/a",
+                item.get("tradeDate") or item.get("marketTime"),
+            ))
+    for error in snapshot["errors"]:
+        print("Quote unavailable: {}: {}".format(error.get("symbol"), error.get("error")))
+    if snapshot.get("emotion"):
+        emotion = snapshot["emotion"]
+        print("A-share emotion: tradeDate={} pools={} breadth={} providers={}".format(
+            emotion.get("tradeDate"), emotion.get("pools"), emotion.get("breadth"),
+            {key: emotion.get(key) for key in ("poolProvider", "breadthProvider", "yesterdayPerformanceProvider")},
+        ))
 
 
 if __name__ == "__main__":
