@@ -324,7 +324,14 @@ def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
         if pause:
             time.sleep(pause)
     try:
-        emotion = fetch_emotion()
+        a_share_dates = [
+            quote.get("tradeDate", "").replace("-", "")
+            for quote in quotes
+            if quote.get("market") == "A股" and quote.get("tradeDate")
+        ]
+        # The quote provider supplies the actual latest market date, including
+        # weekends and holidays; do not infer it from a possibly delayed pool API.
+        emotion = fetch_emotion(max(a_share_dates) if a_share_dates else None)
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
         emotion = {"errors": [{"source": "emotion", "error": str(exc)[:160]}]}
     return {
