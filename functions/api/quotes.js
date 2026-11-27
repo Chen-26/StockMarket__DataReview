@@ -1,16 +1,16 @@
 const WATCHLIST = [
-  ["^GSPC", "����", "����ָ��"],
-  ["^IXIC", "����", "����ָ��"],
-  ["^DJI", "����", "����ָ��"],
-  ["000001.SS", "A��", "A��ָ��"],
-  ["000300.SS", "A��", "A��ָ��"],
-  ["399001.SZ", "A��", "A��ָ��"],
-  ["399006.SZ", "A��", "A��ָ��"],
-  ["600519.SS", "A��", "A�ɸ���"],
-  ["300750.SZ", "A��", "A�ɸ���"],
-  ["AAPL", "����", "���ɸ���"],
-  ["NVDA", "����", "���ɸ���"],
-  ["TSLA", "����", "���ɸ���"],
+  ["^GSPC", "美股", "美股指数"],
+  ["^IXIC", "美股", "美股指数"],
+  ["^DJI", "美股", "美股指数"],
+  ["000001.SS", "A股", "A股指数"],
+  ["000300.SS", "A股", "A股指数"],
+  ["399001.SZ", "A股", "A股指数"],
+  ["399006.SZ", "A股", "A股指数"],
+  ["600519.SS", "A股", "A股个股"],
+  ["300750.SZ", "A股", "A股个股"],
+  ["AAPL", "美股", "美股个股"],
+  ["NVDA", "美股", "美股个股"],
+  ["TSLA", "美股", "美股个股"],
 ];
 
 async function fetchQuote([symbol, market, category]) {
@@ -73,12 +73,12 @@ export async function onRequest(context) {
   const quotes = results.filter((result) => result.status === "fulfilled").map((result) => result.value);
   const errors = results.filter((result) => result.status === "rejected").length;
   if (!quotes.length) {
-    return Response.json({ error: "����Դ��ʱ������", quotes: [] }, { status: 502 });
+    return Response.json({ error: "行情源暂时不可用", quotes: [] }, { status: 502 });
   }
 
   const response = Response.json({
     updatedAt: new Date().toISOString(),
-    provider: "Yahoo Finance chart �� 1m",
+    provider: "Yahoo Finance chart · 1m",
     quotes,
     unavailable: errors,
   }, {
@@ -87,4 +87,3 @@ export async function onRequest(context) {
   context.waitUntil(cache.put(cacheKey, response.clone()));
   return response;
 }
-
