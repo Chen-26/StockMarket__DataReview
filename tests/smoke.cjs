@@ -48,10 +48,10 @@ const data = {
   updatedAt: "2026-11-27T14:00:00Z",
   provider: "smoke fixture",
   quotes: [
-    { symbol: "000001.SS", name: "��ָ֤��", market: "A��", category: "A��ָ��", price: 3300, changePercent: 0.5, sparkline: [3290, 3300] },
-    { symbol: "600519.SS", name: "����ę́", market: "A��", category: "A�ɸ���", price: 1500, changePercent: -0.4, sparkline: [1510, 1500] },
-    { symbol: "^GSPC", name: "S&P 500", market: "����", category: "����ָ��", price: 5900, changePercent: 0.2, sparkline: [5890, 5900] },
-    { symbol: "NVDA", name: "NVIDIA", market: "����", category: "���ɸ���", price: 140, changePercent: 1.2, sparkline: [138, 140] },
+    { symbol: "000001.SS", name: "上证指数", market: "A股", category: "A股指数", price: 3300, changePercent: 0.5, sparkline: [3290, 3300] },
+    { symbol: "600519.SS", name: "贵州茅台", market: "A股", category: "A股个股", price: 1500, changePercent: -0.4, sparkline: [1510, 1500] },
+    { symbol: "^GSPC", name: "S&P 500", market: "美股", category: "美股指数", price: 5900, changePercent: 0.2, sparkline: [5890, 5900] },
+    { symbol: "NVDA", name: "NVIDIA", market: "美股", category: "美股个股", price: 140, changePercent: 1.2, sparkline: [138, 140] },
   ],
 };
 const storage = new Map();
@@ -106,23 +106,23 @@ async function main() {
   element("search").value = "NVDA";
   fire("search", "input");
   assert.match(element("usRows").innerHTML, /NVDA/, "search finds matching symbol");
-  assert.match(element("cnRows").innerHTML, /û��ƥ��ı��/, "search filters other market");
+  assert.match(element("cnRows").innerHTML, /没有匹配的标的/, "search filters other market");
 
-  element("marketNote").value = "��¼�г�����";
+  element("marketNote").value = "记录市场驱动";
   fire("marketNote", "input");
   const noteKey = "market-review-" + new Date().toLocaleDateString("sv-SE");
-  assert.equal(JSON.parse(storage.get(noteKey)).marketNote, "��¼�г�����", "notes autosave locally");
+  assert.equal(JSON.parse(storage.get(noteKey)).marketNote, "记录市场驱动", "notes autosave locally");
 
   fire("refresh", "click");
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(element("status").innerHTML, /����ӿ�������/, "manual refresh keeps quote connection");
+  assert.match(element("status").innerHTML, /行情接口已连接/, "manual refresh keeps quote connection");
 
   element("search").value = "";
   fire("search", "input");
   context.fetch = async () => { throw new Error("local file has no API route"); };
   fire("refresh", "click");
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(element("status").innerHTML, /����Ԥ������/, "offline mode activates local preview data");
+  assert.match(element("status").innerHTML, /本地预览快照/, "offline mode activates local preview data");
   assert.match(element("cnRows").innerHTML, /000001\.SS/, "local preview remains usable without API");
 
   fire("clearNotes", "click");
@@ -166,4 +166,3 @@ main().catch((error) => {
   console.error(error);
   process.exitCode = 1;
 });
-
