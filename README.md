@@ -1,33 +1,28 @@
 # 市场复盘看板
 
-深色响应式 A 股 / 美股复盘网页。可直接打开 `index.html` 体验布局和交互；本地文件模式显示内置预览数据。部署到 Cloudflare Pages 后，页面会通过同域 Pages Function 获取行情。
+深色响应式 A 股 / 美股复盘网页。可直接打开 `index.html` 预览布局和交互；本地文件模式显示内置预览行情。GitHub Pages 部署后，网页读取 Actions 生成的行情快照。
 
 ## 页面内容
 
 - A 股、美股分栏展示主要指数和代表标的。
 - 名称/代码搜索；每个板块可筛选全部、指数或个股。
 - 每日市场判断、交易复盘和下一步计划自动保存在当前浏览器。
-- 网页每分钟检查行情；Function 使用边缘缓存，减少重复请求。
+- 工作日由 GitHub Actions 每 5 分钟抓取一次快照；网页每分钟检查一次。GitHub 可能延迟定时任务，行情源也可能延迟或不可用。
 
-## Cloudflare Pages 免费部署
+## GitHub Pages 发布
 
-1. 在 Cloudflare 控制台进入 **Workers & Pages → Create application → Pages → Connect to Git**。
-2. 授权 GitHub，选择私有仓库 `Chen-26/StockMarket__DataReview` 和生产分支 `main`。
-3. Framework preset 选 **None**；Build command 填 `mkdir -p public && cp index.html public/index.html`；Build output directory 填 `public`。
-4. 保存并部署。以后 push 到 `main` 会自动发布。
+仓库需保持公开（GitHub Free 的 Pages 条件）。进入仓库 **Settings → Pages**，将 **Build and deployment → Source** 设为 **GitHub Actions**。保存后到 **Actions → Publish market review → Run workflow** 触发首次发布。之后代码 push 会自动发布；工作日定时任务也会刷新行情并部署新快照。
 
-`functions/api/quotes.js` 是 Pages Function，无需 API key 或运行时环境变量。Cloudflare Pages Functions 请求会占用 Workers Free 的日请求额度；静态资源请求免费。Git 集成免费方案每月最多 500 次构建。具体额度以 Cloudflare 当前套餐说明为准。
-
-> 注意：Cloudflare Pages 地址默认可公开访问，私有 GitHub 仓库不会自动让网页也变成私有。复盘笔记只存当前浏览器，不会上传；若需要网页访问控制，可再为站点配置 Cloudflare Access。
+预期地址：<https://chen-26.github.io/StockMarket__DataReview/>。网页公开访问，仓库本身也公开；笔记只保存在当前浏览器，不会上传。
 
 ## 调整关注列表
 
-在 `functions/api/quotes.js` 的 `WATCHLIST` 修改代码；若新增标的，再在 `index.html` 补充展示名称和分类。
+在 `scripts/fetch_quotes.py` 的 `WATCHLIST` 修改标的代码。Yahoo Finance 代码常见格式：沪市 `.SS`、深市 `.SZ`。若添加新标的，再到 `index.html` 补充展示名称。
 
-## 核心交互冒烟测试
+## 数据说明
 
-需要 Node.js 20 或更新版本。在项目目录执行 `node tests/smoke.cjs`，验证页面脚本、A 股/美股数据渲染、板块筛选、搜索、笔记自动保存/清空、手动刷新、本地预览回退和行情 Function 响应。
+行情通过 Yahoo Finance 图表接口获取。该接口不是有实时 SLA 的公开行情 API，可能延迟、限流或不可用；看板仅用于复盘参考，不构成投资建议。
 
-## 行情说明
+## 验证
 
-行情来自 Yahoo Finance 图表接口。该接口不是有实时 SLA 的公开行情 API，可能延迟、限流或暂时不可用；页面仅供复盘参考，不构成投资建议。
+需要 Node.js 20+ 和 Python 3。在项目目录运行 `node tests/smoke.cjs` 与 `python -m unittest discover -s tests -p "test_*.py"`。
