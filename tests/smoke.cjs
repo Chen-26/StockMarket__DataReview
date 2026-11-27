@@ -6,7 +6,6 @@ const html = fs.readFileSync("index.html", "utf8");
 const inlineScript = html.match(/<script>([\s\S]*?)<\/script>/);
 assert.ok(inlineScript, "dashboard script exists");
 new vm.Script(inlineScript[1], { filename: "index.html:inline-script" });
-const quoteFunctionSource = fs.readFileSync("functions/api/quotes.js", "utf8");
 
 const handlers = new Map();
 const elements = new Map();
@@ -14,13 +13,7 @@ function element(id, dataset = {}) {
   if (elements.has(id)) return elements.get(id);
   const classes = new Set();
   const value = {
-    id,
-    dataset,
-    value: "",
-    textContent: "",
-    innerHTML: "",
-    style: {},
-    disabled: false,
+    id, dataset, value: "", textContent: "", innerHTML: "", style: {}, disabled: false,
     classList: {
       add(name) { classes.add(name); },
       remove(name) { classes.delete(name); },
@@ -32,9 +25,7 @@ function element(id, dataset = {}) {
         return add;
       },
     },
-    addEventListener(type, callback) {
-      handlers.set(id + ":" + type, callback);
-    },
+    addEventListener(type, callback) { handlers.set(id + ":" + type, callback); },
   };
   elements.set(id, value);
   return value;
@@ -74,13 +65,7 @@ const context = {
   setTimeout(callback) { callback(); return 1; },
   clearTimeout() {},
   confirm: () => true,
-  Date,
-  Promise,
-  Number,
-  String,
-  Math,
-  JSON,
-  isFinite,
+  Date, Promise, Number, String, Math, JSON, isFinite,
 };
 vm.runInNewContext(inlineScript[1], context, { filename: "dashboard-smoke" });
 
@@ -98,7 +83,6 @@ async function main() {
   fire("filter-1", "click");
   assert.match(element("cnRows").innerHTML, /000001\.SS/, "index filter keeps A-share index");
   assert.doesNotMatch(element("cnRows").innerHTML, /600519\.SS/, "index filter hides A-share stock");
-
   fire("filter-5", "click");
   assert.match(element("usRows").innerHTML, /NVDA/, "stock filter keeps US stock");
   assert.doesNotMatch(element("usRows").innerHTML, /\^GSPC/, "stock filter hides US index");
@@ -115,51 +99,18 @@ async function main() {
 
   fire("refresh", "click");
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(element("status").innerHTML, /行情接口已连接/, "manual refresh keeps quote connection");
-
+  assert.match(element("status").innerHTML, /行情快照已连接/, "manual refresh loads quote snapshot");
   element("search").value = "";
   fire("search", "input");
-  context.fetch = async () => { throw new Error("local file has no API route"); };
+  context.fetch = async () => { throw new Error("local file has no snapshot file"); };
   fire("refresh", "click");
   await new Promise((resolve) => setImmediate(resolve));
-  assert.match(element("status").innerHTML, /本地预览快照/, "offline mode activates local preview data");
-  assert.match(element("cnRows").innerHTML, /000001\.SS/, "local preview remains usable without API");
+  assert.match(element("status").innerHTML, /本地预览快照/, "offline mode activates local preview");
+  assert.match(element("cnRows").innerHTML, /000001\.SS/, "local preview remains usable offline");
 
   fire("clearNotes", "click");
   assert.equal(storage.has(noteKey), false, "clear action removes today's local note");
-
-  const originalFetch = global.fetch;
-  const originalCaches = global.caches;
-  const cachedWrites = [];
-  global.fetch = async () => new Response(JSON.stringify({ chart: { result: [{
-    meta: { symbol: "MOCK", longName: "Mock Security", regularMarketPrice: 101, chartPreviousClose: 100, currency: "USD", regularMarketTime: 1795791600 },
-    indicators: { quote: [{ close: [99, 100, 101], volume: [10, 20, 30] }] },
-  }] } }), { status: 200, headers: { "Content-Type": "application/json" } });
-  global.caches = { default: {
-    match: async () => undefined,
-    put: async (_key, response) => cachedWrites.push(await response.json()),
-  } };
-  try {
-    const moduleUrl = "data:text/javascript;base64," + Buffer.from(quoteFunctionSource).toString("base64");
-    const quoteModule = await import(moduleUrl);
-    const pending = [];
-    const response = await quoteModule.onRequest({
-      request: new Request("https://review.pages.dev/api/quotes"),
-      waitUntil: (promise) => pending.push(promise),
-    });
-    const body = await response.json();
-    assert.equal(response.status, 200, "quote function returns success with upstream data");
-    assert.equal(body.quotes.length, 12, "quote function returns configured symbols");
-    assert.equal(body.quotes[0].price, 101, "quote function parses latest price");
-    assert.equal(body.quotes[0].changePercent, 1, "quote function calculates change percent");
-    await Promise.all(pending);
-    assert.equal(cachedWrites.length, 1, "quote function writes edge cache");
-  } finally {
-    global.fetch = originalFetch;
-    if (originalCaches === undefined) delete global.caches;
-    else global.caches = originalCaches;
-  }
-  console.log("Smoke passed: market rendering, filters, search, local notes, refresh, clear, and quote API.");
+  console.log("Smoke passed: rendering, filters, search, notes, refresh, and offline preview.");
 }
 
 main().catch((error) => {
