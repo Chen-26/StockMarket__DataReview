@@ -192,12 +192,18 @@ def fetch_emotion(trade_date=None):
             code = item.get("f12")
             if code:
                 current_changes[str(code)] = value
+        total = data.get("total", len(changes))
+        complete = len(changes) >= int(total or 0)
         result["breadth"] = {
-            "up": sum(1 for value in changes if value > 0),
-            "down": sum(1 for value in changes if value < 0),
-            "flat": sum(1 for value in changes if value == 0),
-            "total": data.get("total", len(changes)),
+            "up": sum(1 for value in changes if value > 0) if complete else None,
+            "down": sum(1 for value in changes if value < 0) if complete else None,
+            "flat": sum(1 for value in changes if value == 0) if complete else None,
+            "total": total,
         }
+        result["breadthComplete"] = complete
+        result["breadthSampleSize"] = len(changes)
+        if not complete:
+            result["errors"].append({"source": "breadth", "error": "incomplete quote page: {} of {} stocks".format(len(changes), total)})
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
         result["errors"].append({"source": "breadth", "error": str(exc)[:160]})
 
@@ -320,11 +326,14 @@ def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
         emotion = {"errors": [{"source": "emotion", "error": str(exc)[:160]}]}
     return {
         "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "provider": "A股行情/涨跌停：同花顺；涨跌家数/昨日表现：东方财富；美股：Yahoo Finance",
+        "provider": "A股行情：同花顺；情绪池：{}；涨跌家数/昨日表现：东方财富；美股：Yahoo Finance".format(
+            (emotion or {}).get("poolProvider", "不可用")
+        ),
         "providers": {
             "A股行情": "Tonghuashun public K-line endpoint",
-            "A股涨跌停/炸板": "Tonghuashun public data endpoint",
-            "A股涨跌家数及昨日表现": "Eastmoney public quote endpoints",
+            "A股涨跌停/炸板": (emotion or {}).get("poolProvider", "unavailable"),
+            "A股涨跌家数": (emotion or {}).get("breadthProvider", "unavailable"),
+            "昨日涨跌停股表现": (emotion or {}).get("yesterdayPerformanceProvider", "unavailable"),
             "美股行情": "Yahoo Finance",
         },
         "intervalMinutes": 5,
@@ -362,6 +371,8 @@ def main():
             emotion.get("tradeDate"), emotion.get("pools"), emotion.get("breadth"),
             {key: emotion.get(key) for key in ("poolProvider", "breadthProvider", "yesterdayPerformanceProvider")},
         ))
+        for error in emotion.get("errors", []):
+            print("A-share data warning: {}: {}".format(error.get("source"), error.get("error")))
 
 
 if __name__ == "__main__":
