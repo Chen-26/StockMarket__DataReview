@@ -289,12 +289,15 @@ def fetch_emotion(trade_date=None):
             down = ths["pools"]["limitDown"]
             broken = ths["pools"]["broken"]
             result["pools"].update({
-                "limitUpCount": len(up),
-                "limitDownCount": len(down),
-                "brokenCount": len(broken),
+                "limitUpCount": ths["counts"]["limitUp"],
+                "limitDownCount": ths["counts"]["limitDown"],
+                "brokenCount": ths["counts"]["broken"],
             })
-            if len(up) + len(broken):
-                result["pools"]["brokenRate"] = round(len(broken) / (len(up) + len(broken)) * 100, 2)
+            if ths["counts"]["limitUp"] + ths["counts"]["broken"]:
+                result["pools"]["brokenRate"] = round(
+                    ths["counts"]["broken"] /
+                    (ths["counts"]["limitUp"] + ths["counts"]["broken"]) * 100, 2
+                )
             result["poolProvider"] = "Tonghuashun public data endpoint"
             result["tradeDate"] = "{}-{}-{}".format(
                 ths["tradeDate"][:4], ths["tradeDate"][4:6], ths["tradeDate"][6:8]
