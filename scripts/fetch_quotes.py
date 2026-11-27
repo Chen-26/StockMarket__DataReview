@@ -10,6 +10,13 @@ import urllib.error
 import urllib.parse
 import urllib.request
 
+try:
+    from ths_provider import fetch_emotion_pools as fetch_ths_emotion_pools
+    from ths_provider import fetch_quote as fetch_ths_quote
+except ImportError:
+    fetch_ths_emotion_pools = None
+    fetch_ths_quote = None
+
 
 WATCHLIST = [
     ("^GSPC", "美股", "美股指数"),
@@ -136,7 +143,7 @@ def parse_pool_stock(item):
 
 
 def fetch_emotion(trade_date=None):
-    """Fetch A-share breadth and daily limit-pool data from Eastmoney."""
+    """Fetch breadth and prior cohorts, with THS as the limit-pool source."""
     now_cn = dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
     day = trade_date or now_cn.strftime("%Y%m%d")
     if trade_date is None and now_cn.weekday() >= 5:
@@ -269,13 +276,40 @@ def fetch_emotion(trade_date=None):
             result["yesterdayDate"] = "{}-{}-{}".format(prior_date[:4], prior_date[4:6], prior_date[6:8])
     except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
         result["errors"].append({"source": "yesterdayLimitDown", "error": str(exc)[:160]})
+    try:
+        if fetch_ths_emotion_pools:
+            ths = fetch_ths_emotion_pools(day)
+            up = ths["pools"]["limitUp"]
+            down = ths["pools"]["limitDown"]
+            broken = ths["pools"]["broken"]
+            result["pools"].update({
+                "limitUpCount": len(up),
+                "limitDownCount": len(down),
+                "brokenCount": len(broken),
+            })
+            if len(up) + len(broken):
+                result["pools"]["brokenRate"] = round(len(broken) / (len(up) + len(broken)) * 100, 2)
+            result["poolProvider"] = "Tonghuashun public data endpoint"
+            result["tradeDate"] = "{}-{}-{}".format(
+                ths["tradeDate"][:4], ths["tradeDate"][4:6], ths["tradeDate"][6:8]
+            ) if len(ths["tradeDate"]) == 8 else ths["tradeDate"]
+        else:
+            result["poolProvider"] = "Eastmoney public endpoints (THS unavailable)"
+    except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError) as exc:
+        result["errors"].append({"source": "tonghuashun_pools", "error": str(exc)[:160]})
+        result["poolProvider"] = "Eastmoney public endpoints (THS unavailable)"
+    result["breadthProvider"] = "Eastmoney public quote endpoint"
+    result["yesterdayPerformanceProvider"] = "Eastmoney public quote endpoint"
     return result
 
 def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
     quotes, errors = [], []
     for symbol, market, category in watchlist:
         try:
-            quotes.append(fetcher(symbol, market, category))
+            if market == "A股" and fetcher is fetch_quote and fetch_ths_quote:
+                quotes.append(fetch_ths_quote(symbol, market, category))
+            else:
+                quotes.append(fetcher(symbol, market, category))
         except (urllib.error.URLError, TimeoutError, ValueError, KeyError, IndexError, json.JSONDecodeError) as exc:
             errors.append({"symbol": symbol, "error": str(exc)[:180]})
         if pause:
@@ -286,7 +320,13 @@ def build_snapshot(watchlist=WATCHLIST, fetcher=fetch_quote, pause=0.35):
         emotion = {"errors": [{"source": "emotion", "error": str(exc)[:160]}]}
     return {
         "updatedAt": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "provider": "Yahoo Finance + Eastmoney public quote endpoints",
+        "provider": "A股行情/涨跌停：同花顺；涨跌家数/昨日表现：东方财富；美股：Yahoo Finance",
+        "providers": {
+            "A股行情": "Tonghuashun public K-line endpoint",
+            "A股涨跌停/炸板": "Tonghuashun public data endpoint",
+            "A股涨跌家数及昨日表现": "Eastmoney public quote endpoints",
+            "美股行情": "Yahoo Finance",
+        },
         "intervalMinutes": 5,
         "quotes": quotes,
         "emotion": emotion,
