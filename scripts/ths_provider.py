@@ -10,6 +10,8 @@ import json
 import re
 import urllib.parse
 import urllib.request
+import time
+import urllib.error
 
 
 HEADERS = {
@@ -17,6 +19,7 @@ HEADERS = {
     "Referer": "https://q.10jqka.com.cn/",
     "User-Agent": "Mozilla/5.0 (compatible; StockMarketDataReview/1.0)",
 }
+DATA_HEADERS = dict(HEADERS, Referer="https://data.10jqka.com.cn/")
 
 THS_CODES = {
     "000001.SS": "1A0001",
@@ -28,10 +31,16 @@ THS_CODES = {
 }
 
 
-def _fetch_text(url):
-    request = urllib.request.Request(url, headers=HEADERS)
-    with urllib.request.urlopen(request, timeout=20) as response:
-        return response.read().decode("utf-8")
+def _fetch_text(url, headers=None):
+    for attempt in range(3):
+        request = urllib.request.Request(url, headers=headers or HEADERS)
+        try:
+            with urllib.request.urlopen(request, timeout=20) as response:
+                return response.read().decode("utf-8")
+        except urllib.error.HTTPError as exc:
+            if exc.code not in (429, 500, 502, 503, 504) or attempt == 2:
+                raise
+            time.sleep(0.6 * (attempt + 1))
 
 
 def fetch_quote(symbol, market, category):
@@ -100,7 +109,7 @@ def _fetch_pool(route, day):
         }
     )
     url = "https://data.10jqka.com.cn/dataapi/limit_up/{}?{}".format(route, query)
-    payload = json.loads(_fetch_text(url))
+    payload = json.loads(_fetch_text(url, DATA_HEADERS))
     if payload.get("status_code") not in (None, 0):
         raise ValueError("Tonghuashun pool error: {}".format(payload.get("status_msg")))
     data = payload.get("data") or {}
