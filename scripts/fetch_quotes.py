@@ -3,7 +3,6 @@
 
 import argparse
 import datetime as dt
-from zoneinfo import ZoneInfo
 import json
 import os
 import time
@@ -138,7 +137,21 @@ def parse_pool_stock(item):
 
 def fetch_emotion(trade_date=None):
     """Fetch A-share breadth and daily limit-pool data from Eastmoney."""
-    day = trade_date or dt.datetime.now(ZoneInfo("Asia/Shanghai")).strftime("%Y%m%d")
+    now_cn = dt.datetime.now(dt.timezone(dt.timedelta(hours=8)))
+    day = trade_date or now_cn.strftime("%Y%m%d")
+    if trade_date is None and now_cn.weekday() >= 5:
+        for offset in range(1, 11):
+            candidate = (now_cn - dt.timedelta(days=offset)).strftime("%Y%m%d")
+            try:
+                prior, pool = eastmoney_list("getTopicZTPool", {
+                    "ut": "7eea3edcaed734bea9cbfc24409ed989", "dpt": "wz.ztzt",
+                    "Pageindex": 0, "pagesize": 1000, "sort": "fbt:asc", "date": candidate,
+                })
+                if int(prior.get("tc", len(pool)) or 0) > 0:
+                    day = candidate
+                    break
+            except (urllib.error.URLError, TimeoutError, ValueError, KeyError, json.JSONDecodeError):
+                continue
     display_day = "{}-{}-{}".format(day[:4], day[4:6], day[6:8])
     current_changes = {}
     result = {
