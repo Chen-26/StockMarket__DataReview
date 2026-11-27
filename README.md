@@ -27,3 +27,10 @@
 ## 验证
 
 需要 Node.js 20+ 和 Python 3。在项目目录运行 `node tests/smoke.cjs` 与 `python -m unittest discover -s tests -p "test_*.py"`。
+
+
+## 历史交易日
+
+- 页面顶部可按日期查看当日行情和情绪快照。
+- GitHub Actions 在交易日 15:05 之后保存每日快照，目前最多保留 756 个交易日。
+- 这次功能上线后才开始累积存档；选择尚无存档的日期会提示没有数据。
