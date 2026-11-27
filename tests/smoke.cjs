@@ -44,6 +44,18 @@ const marketPanels = [
   element("cnPanel", { marketView: "cn" }),
   element("usPanel", { marketView: "us" }),
 ];
+const cnSubTabs = [
+  element("cn-tab-market", { cnTab: "market" }),
+  element("cn-tab-emotion", { cnTab: "emotion" }),
+];
+const cnSubViews = [
+  element("cn-market-view", { cnView: "market" }),
+  element("cn-emotion-view", { cnView: "emotion" }),
+];
+const emotionGroups = [
+  element("yesterday-up", { yesterdayGroup: "up" }),
+  element("yesterday-down", { yesterdayGroup: "down" }),
+];
 marketTabs[0].classList.add("active");
 marketTabs[0].setAttribute("aria-selected", "true");
 marketTabs[1].setAttribute("aria-selected", "false");
@@ -51,6 +63,14 @@ marketPanels[1].hidden = true;
 const data = {
   updatedAt: "2026-11-27T14:00:00Z",
   provider: "smoke fixture",
+  emotion: {
+    tradeDate: "2026-11-27", yesterdayDate: "2026-11-26",
+    breadth: { up: 2500, down: 1700, flat: 150, total: 4350 },
+    pools: { limitUpCount: 60, limitDownCount: 8, brokenCount: 20, brokenRate: 25 },
+    yesterdayLimitUp: [{ symbol: "600001", name: "Alpha", changePercent: 4.2 }],
+    yesterdayLimitDown: [{ symbol: "600002", name: "Beta", changePercent: -2.1 }],
+    yesterdayPerformance: { up: { avgChangePercent: 1.5, positiveCount: 1, negativeCount: 0 }, down: { avgChangePercent: -2.1, positiveCount: 0, negativeCount: 1 } },
+  },
   quotes: [
     { symbol: "000001.SS", name: "上证指数", market: "A股", category: "A股指数", price: 3300, changePercent: 0.5, sparkline: [3290, 3300] },
     { symbol: "600519.SS", name: "贵州茅台", market: "A股", category: "A股个股", price: 1500, changePercent: -0.4, sparkline: [1510, 1500] },
@@ -65,6 +85,9 @@ const context = {
     querySelectorAll(selector) {
       if (selector === ".market-tab") return marketTabs;
       if (selector === ".market-view") return marketPanels;
+      if (selector === ".cn-subtab") return cnSubTabs;
+      if (selector === ".cn-subview") return cnSubViews;
+      if (selector === ".emotion-group") return emotionGroups;
       if (selector === ".filter") return filters;
       const match = selector.match(/\.filter\[data-market="(cn|us)"\]/);
       return match ? filters.filter((item) => item.dataset.market === match[1]) : [];
@@ -94,6 +117,15 @@ async function main() {
   await new Promise((resolve) => setImmediate(resolve));
   assert.match(element("cnRows").innerHTML, /600519\.SS/, "A-share table renders");
   assert.match(element("usRows").innerHTML, /NVDA/, "US table renders");
+  assert.equal(element("emotionUp").textContent, "2,500", "A-share breadth renders from snapshot");
+  assert.equal(element("limitUpCount").textContent, "60", "limit-up count renders from snapshot");
+  assert.equal(element("brokenRate").textContent, "25.0%", "opened-limit rate renders from snapshot");
+  assert.match(element("yesterdayRows").innerHTML, /600001/, "yesterday limit-up performance renders");
+  fire("cn-tab-emotion", "click");
+  assert.equal(element("cn-market-view").hidden, true, "emotion tab hides market view");
+  assert.equal(element("cn-emotion-view").hidden, false, "emotion tab shows emotion view");
+  fire("yesterday-down", "click");
+  assert.match(element("yesterdayRows").innerHTML, /600002/, "yesterday limit-down group switches");
 
   fire("tab-us", "click");
   assert.equal(element("cnPanel").hidden, true, "US tab hides A-share panel");
